@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <style>
+        .boxes-container {
+            display: flex;
+            flex-direction: column; 
+            width: 50%; 
+        }
+        .box {
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin-bottom: 20px;
+            width: 500px;
+            text-align: center;
+        }
+        .box.topic1 {
+            background-color: #ffcccc; 
+        }
+        .box.topic2 {
+            background-color: #cceeff; 
+        }
+        .field {
+            margin-bottom: 10px;
+        }
+        .fields {
+            width: 50%;
+        }
+        .page {
+            display: flex;
+            flex-direction: row;
+        }
+    </style>
+</head>
+<body>
+    <h2>Command microservice</h2>
+    <div class="page">
+    <div class="boxes-container">
+    <div class="box topic1">
+        <h3>Fire alarm</h3>
+        <p class="topic1-content"></p>
+    </div>
+
+    <div class="box topic2">
+        <h3>High temperature</h3>
+        <p class="topic2-content"></p>
+    </div>
+    </div>
+    <div class="fields">
+        <h3>Values that caused the last alarm:</h3>
+        <div id="fields-topic"></div>
+    </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        function formatTimestamp(isoString) {
+            const date = new Date(isoString);
+
+            const optionsDate = {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            };
+
+            const optionsTime = {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true // Use 12-hour clock with AM/PM
+            };
+
+            const formattedDate = date.toLocaleDateString(undefined, optionsDate);
+            const formattedTime = date.toLocaleTimeString(undefined, optionsTime);
+
+            return `${formattedDate} at ${formattedTime}`;
+        }
+        const socket = io();
+
+        socket.on('mqtt_message_topic1', (message) => {
+            updateBox('topic1', message);
+            updateFields('fields-topic', message);
+        });
+
+        socket.on('mqtt_message_topic2', (message) => {
+            updateBox('topic2', message);
+            updateFields('fields-topic', message);
+        });
+
+        function updateBox(topic, message) {
+            const box = document.querySelector(`.box.${topic}`);
+            const content = box.querySelector(`.${topic}-content`);
+            content.textContent = "Last raised at " + formatTimestamp(message['Timestamp']);
+        }
+
+        function updateFields(containerId, message) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+
+            Object.keys(message).forEach(key => {
+                const field = document.createElement('div');
+                field.classList.add('field');
+                field.innerHTML = `<strong>${key}:</strong> ${message[key]}`;
+                container.appendChild(field);
+            });
+        }
+    </script>
+</body>
+</html>

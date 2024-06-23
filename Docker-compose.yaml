@@ -1,0 +1,138 @@
+version: "3.7"
+
+services:
+  mongodb:
+    image: mongo
+    container_name: mongodb
+    ports: 
+      - "27017:27017"
+    volumes:
+      - ./data:/data/db
+    networks:
+      - iot_projekat3
+
+  mosquitto:
+    image: eclipse-mosquitto
+    hostname: mosquitto
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+    networks:
+      - iot_projekat3
+
+  
+  manager:
+      image: emqx/ekuiper-manager:1.8
+      container_name: ekuiper-manager
+      ports:
+       - "9082:9082"
+      restart: unless-stopped
+      environment:
+         DEFAULT_EKUIPER_ENDPOINT: "http://ekuiper:9081"
+      networks:
+        - iot_projekat3
+         
+  ekuiper:
+    image: lfedge/ekuiper:1.8.0
+    ports:
+      - "9081:9081"
+    container_name: ekuiper
+    hostname: ekuiper
+    restart: unless-stopped
+    user: root
+    volumes:
+       - /tmp/data:/kuiper/data
+       - /tmp/log:/kuiper/log
+    environment:
+      MQTT_SOURCE__DEFAULT__SERVER: "tcp://mosquitto:1883"
+      KUIPER__BASIC__CONSOLELOG: "true"
+      KUIPER__BASIC__IGNORECASE: "false"
+    networks:
+      - iot_projekat3
+  
+
+  nats-server:
+    image: nats
+    container_name: nats-server
+    ports:
+      - "4222:4222"
+    networks:
+      - iot_projekat3
+
+  filter:
+    build: 
+      context: ./filtermicroservice
+      dockerfile: Dockerfile
+    container_name: filter-ms
+    depends_on:
+      - sensor
+      - nats-server
+    networks:
+      - iot_projekat3
+
+  influxdb:
+    image: influxdb
+    container_name: influxdb
+    ports:
+      - "8086:8086"
+    volumes:
+      - ./influxdb_data:/var/lib/influxdb2
+    networks:
+      - iot_projekat3
+
+  dashboard:
+    build: 
+      context: ./dashboardmicroservice
+      dockerfile: Dockerfile
+    container_name: dashboard-ms
+    depends_on:
+      - filter
+      - nats-server
+      - influxdb
+    networks:
+      - iot_projekat3
+  
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_ORG=norg
+      - INFLUXDB_BUCKET=sensor_data
+      - GF_INFLUXDB_TOKEN=cf5lZ1ZqudHe-kYnKSNIb7fBdjR7edR7_2Hoo-eTT7xkARIXei702nmNatk3Y1BIhGKZKgJUxwXHlYHroEQaAQ==
+      - GF_LOG_LEVEL=debug
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - influxdb
+    networks:
+      - iot_projekat3
+
+  command:
+    build: 
+      context: ./commandmicroservice
+      dockerfile: Dockerfile
+    container_name: command-ms
+    ports:
+      - "5001:5001"
+    depends_on:
+      - mosquitto
+    networks:
+      - iot_projekat3
+
+  sensor:
+    image: sensor-ms
+    container_name: sensor-ms 
+    networks:
+      - iot_projekat3 
+    depends_on:
+      - mosquitto
+      - mongodb
+
+networks:
+  iot_projekat3:
+    driver: bridge
